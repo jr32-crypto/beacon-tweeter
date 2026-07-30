@@ -3,7 +3,7 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import requests
 
 BEACON_URL    = os.environ["BEACON_URL"].rstrip("/")
@@ -12,10 +12,12 @@ TW_COOKIES    = os.environ.get("TWITTER_COOKIES", "")
 GH_TOKEN      = os.environ.get("GH_TOKEN", "")
 GH_REPO       = os.environ.get("GH_REPO", "")
 
-MIN_VALUE_USD = 50_000
-PER_RUN_CAP   = 3
-DAILY_CAP     = 20
-TWEET_GAP_SEC = 25
+MIN_VALUE_USD    = 50_000
+PER_RUN_CAP      = 3
+DAILY_CAP        = 20
+TWEET_GAP_SEC    = 25
+POSTING_HOUR_START = 8   # 8am ET
+POSTING_HOUR_END   = 17  # 5pm ET
 
 
 def extract_value(body: str) -> float:
@@ -225,6 +227,14 @@ async def main() -> None:
     except Exception as e:
         print(f"ERROR: Failed to parse TWITTER_COOKIES: {e}")
         sys.exit(1)
+
+    # Check posting window (8am–5pm ET = UTC-4 in summer, UTC-5 in winter)
+    utc_now = datetime.now(timezone.utc)
+    et_offset = -4 if utc_now.month in range(3, 11) else -5  # rough DST
+    et_hour = (utc_now + timedelta(hours=et_offset)).hour
+    if not (POSTING_HOUR_START <= et_hour < POSTING_HOUR_END):
+        print(f"Outside posting window (ET hour={et_hour}, window={POSTING_HOUR_START}-{POSTING_HOUR_END}). Skipping.")
+        return
 
     today, daily_count = get_daily_count()
     remaining_today = DAILY_CAP - daily_count
