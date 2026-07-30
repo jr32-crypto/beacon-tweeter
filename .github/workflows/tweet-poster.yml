@@ -2,17 +2,13 @@ name: Tweet Poster
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # every 5 minutes
-  workflow_dispatch:          # allow manual trigger from GitHub UI
-
-permissions:
-  actions: write              # needed to update TWITTER_COOKIES variable
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
 
 jobs:
   post-tweets:
     runs-on: ubuntu-latest
     timeout-minutes: 3
-
     steps:
       - uses: actions/checkout@v4
 
@@ -26,12 +22,12 @@ jobs:
 
       - name: Post pending tweets
         env:
-          BEACON_URL:        ${{ secrets.BEACON_URL }}
-          BEACON_SECRET:     ${{ secrets.BEACON_SECRET }}
-          TWITTER_USERNAME:  ${{ secrets.TWITTER_USERNAME }}
-          TWITTER_EMAIL:     ${{ secrets.TWITTER_EMAIL }}
-          TWITTER_PASSWORD:  ${{ secrets.TWITTER_PASSWORD }}
-          TWITTER_COOKIES:   ${{ vars.TWITTER_COOKIES }}
-          GH_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO:           ${{ github.repository }}
+          BEACON_URL:       ${{ secrets.BEACON_URL }}
+          BEACON_SECRET:    ${{ secrets.BEACON_SECRET }}
+          TWITTER_USERNAME: ${{ secrets.TWITTER_USERNAME }}
+          TWITTER_EMAIL:    ${{ secrets.TWITTER_EMAIL }}
+          TWITTER_PASSWORD: ${{ secrets.TWITTER_PASSWORD }}
+          TWITTER_COOKIES:  ${{ vars.TWITTER_COOKIES }}
+          GH_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO:          ${{ github.repository }}
         run: python tweet_poster.py
