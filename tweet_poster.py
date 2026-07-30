@@ -7,9 +7,6 @@ import requests
 
 BEACON_URL   = os.environ["BEACON_URL"].rstrip("/")
 BEACON_SECRET = os.environ["BEACON_SECRET"]
-TW_USERNAME  = os.environ["TWITTER_USERNAME"]
-TW_EMAIL     = os.environ["TWITTER_EMAIL"]
-TW_PASSWORD  = os.environ["TWITTER_PASSWORD"]
 TW_COOKIES   = os.environ.get("TWITTER_COOKIES", "")
 GH_TOKEN     = os.environ.get("GH_TOKEN", "")
 GH_REPO      = os.environ.get("GH_REPO", "")
@@ -188,26 +185,16 @@ async def main() -> None:
 
     client = Client("en-US")
 
-    # Load saved cookies if available
-    cookies_loaded = False
-    if TW_COOKIES.strip():
-        try:
-            client.set_cookies(json.loads(TW_COOKIES))
-            cookies_loaded = True
-            print("Loaded saved cookies.")
-        except Exception as e:
-            print(f"Cookie load failed ({e}), will re-login.")
+    if not TW_COOKIES.strip() or TW_COOKIES.strip().lower() == "none":
+        print("ERROR: TWITTER_COOKIES variable is empty. Set it to {\"auth_token\": \"...\", \"ct0\": \"...\"}")
+        sys.exit(1)
 
-    if not cookies_loaded:
-        print("Logging in with username/password...")
-        await client.login(
-            auth_info_1=TW_USERNAME,
-            auth_info_2=TW_EMAIL,
-            password=TW_PASSWORD,
-        )
-        new_cookies = json.dumps(client.get_cookies())
-        update_gh_variable("TWITTER_COOKIES", new_cookies)
-        print("Saved new session cookies to GitHub variable.")
+    try:
+        client.set_cookies(json.loads(TW_COOKIES))
+        print("Loaded Twitter cookies.")
+    except Exception as e:
+        print(f"ERROR: Failed to parse TWITTER_COOKIES: {e}")
+        sys.exit(1)
 
     alerts = get_pending_alerts()
     print(f"Found {len(alerts)} pending alert(s).")

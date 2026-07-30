@@ -23,12 +23,9 @@ jobs:
 
       - name: Post pending tweets
         env:
-          BEACON_URL:       ${{ secrets.BEACON_URL }}
-          BEACON_SECRET:    ${{ secrets.BEACON_SECRET }}
-          TWITTER_USERNAME: ${{ secrets.TWITTER_USERNAME }}
-          TWITTER_EMAIL:    ${{ secrets.TWITTER_EMAIL }}
-          TWITTER_PASSWORD: ${{ secrets.TWITTER_PASSWORD }}
-          TWITTER_COOKIES:  ${{ vars.TWITTER_COOKIES }}
-          GH_TOKEN:         ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO:          ${{ github.repository }}
+          BEACON_URL:      ${{ secrets.BEACON_URL }}
+          BEACON_SECRET:   ${{ secrets.BEACON_SECRET }}
+          TWITTER_COOKIES: ${{ vars.TWITTER_COOKIES }}
+          GH_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO:         ${{ github.repository }}
         run: python tweet_poster.py
