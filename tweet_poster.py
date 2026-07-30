@@ -3,15 +3,19 @@ import json
 import os
 import re
 import sys
+from datetime import datetime, timezone
 import requests
 
-BEACON_URL   = os.environ["BEACON_URL"].rstrip("/")
+BEACON_URL    = os.environ["BEACON_URL"].rstrip("/")
 BEACON_SECRET = os.environ["BEACON_SECRET"]
-TW_COOKIES   = os.environ.get("TWITTER_COOKIES", "")
-GH_TOKEN     = os.environ.get("GH_TOKEN", "")
-GH_REPO      = os.environ.get("GH_REPO", "")
+TW_COOKIES    = os.environ.get("TWITTER_COOKIES", "")
+GH_TOKEN      = os.environ.get("GH_TOKEN", "")
+GH_REPO       = os.environ.get("GH_REPO", "")
 
 MIN_VALUE_USD = 50_000
+PER_RUN_CAP   = 3
+DAILY_CAP     = 20
+TWEET_GAP_SEC = 25
 
 
 def extract_value(body: str) -> float:
@@ -78,9 +82,9 @@ def build_tweet_text(alert: dict) -> str | None:
     if alert_type in ("insider_buy", "insider_sell") and value < MIN_VALUE_USD:
         return None
 
-    val_str  = format_value(value) if value else ""
-    role     = extract_role(body)
-    person   = extract_person(body)
+    val_str    = format_value(value) if value else ""
+    role       = extract_role(body)
+    person     = extract_person(body)
     person_str = f", {person}," if person else ""
 
     if alert_type == "insider_buy":
@@ -133,11 +137,38 @@ def build_tweet_text(alert: dict) -> str | None:
     return text[:280] if len(text) <= 280 else text[:277] + "..."
 
 
+def get_daily_count() -> tuple[str, int]:
+    """Return (today_str, count_so_far) from the TWEETS_TODAY GitHub variable."""
+    if not GH_TOKEN or not GH_REPO:
+        return ("", 0)
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    owner, repo = GH_REPO.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/variables/TWEETS_TODAY"
+    headers = {
+        "Authorization": f"Bearer {GH_TOKEN}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    r = requests.get(url, headers=headers, timeout=10)
+    if r.status_code == 200:
+        raw = r.json().get("value", "")
+        # format: "YYYY-MM-DD:count"
+        if ":" in raw:
+            date_part, count_part = raw.split(":", 1)
+            if date_part == today:
+                return (today, int(count_part))
+    return (today, 0)
+
+
+def save_daily_count(today: str, count: int) -> None:
+    update_gh_variable("TWEETS_TODAY", f"{today}:{count}")
+
+
 def get_pending_alerts() -> list[dict]:
     r = requests.get(
         f"{BEACON_URL}/api/ingest/pending-tweets",
         headers={"X-Beacon-Secret": BEACON_SECRET},
-        params={"limit": 10},
+        params={"limit": PER_RUN_CAP},
         timeout=15,
     )
     r.raise_for_status()
@@ -162,7 +193,6 @@ def update_gh_variable(name: str, value: str) -> None:
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
     }
-    # Try PATCH first (update), fall back to POST (create)
     r = requests.patch(url, json={"name": name, "value": value}, headers=headers, timeout=10)
     if r.status_code == 404:
         requests.post(
@@ -196,33 +226,46 @@ async def main() -> None:
         print(f"ERROR: Failed to parse TWITTER_COOKIES: {e}")
         sys.exit(1)
 
+    today, daily_count = get_daily_count()
+    remaining_today = DAILY_CAP - daily_count
+    if remaining_today <= 0:
+        print(f"Daily cap reached ({daily_count}/{DAILY_CAP}). Skipping run.")
+        return
+
+    print(f"Daily count: {daily_count}/{DAILY_CAP} ({remaining_today} remaining today).")
+
     alerts = get_pending_alerts()
     print(f"Found {len(alerts)} pending alert(s).")
 
     posted = 0
     for alert in alerts:
+        if posted >= min(PER_RUN_CAP, remaining_today):
+            break
+
         tweet_text = build_tweet_text(alert)
         if not tweet_text:
-            mark_tweeted(alert["id"])  # skip non-tweetable, mark so we don't re-check
+            mark_tweeted(alert["id"])
             continue
 
         try:
             await client.create_tweet(text=tweet_text)
             mark_tweeted(alert["id"])
-            print(f"  Posted: [{alert['id']}] {alert.get('ticker')} {alert.get('alert_type')}")
+            daily_count += 1
+            save_daily_count(today, daily_count)
+            print(f"  Posted: [{alert['id']}] {alert.get('ticker')} {alert.get('alert_type')} (today: {daily_count}/{DAILY_CAP})")
             posted += 1
-            await asyncio.sleep(4)  # stay well within rate limits
+            if posted < min(PER_RUN_CAP, remaining_today):
+                await asyncio.sleep(TWEET_GAP_SEC)
         except Exception as e:
             print(f"  FAILED [{alert['id']}]: {e}")
-            # Refresh cookies on auth errors and try to save
             try:
                 new_cookies = json.dumps(client.get_cookies())
                 update_gh_variable("TWITTER_COOKIES", new_cookies)
             except Exception:
                 pass
-            break  # stop on error, retry next run
+            break
 
-    print(f"Done. Posted {posted} tweet(s).")
+    print(f"Done. Posted {posted} tweet(s) this run.")
 
 
 if __name__ == "__main__":
