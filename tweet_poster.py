@@ -180,8 +180,11 @@ async def main() -> None:
     try:
         from twikit import Client
     except ImportError:
-        print("twikit not installed — run: pip install twikit")
-        sys.exit(1)
+        try:
+            from twifork import Client
+        except ImportError:
+            print("twikit/twifork not installed")
+            sys.exit(1)
 
     client = Client("en-US")
 
