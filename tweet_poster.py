@@ -66,7 +66,7 @@ def extract_role(body: str) -> str:
 def build_tweet_text(alert: dict) -> str | None:
     alert_type = alert.get("alert_type", "")
     ticker     = alert.get("ticker")
-    if not ticker:
+    if not ticker or ticker.upper() in ("N/A", "NA", "NULL", "NONE"):
         return None
     if alert_type not in ("insider_buy", "insider_sell", "large_ownership"):
         return None
