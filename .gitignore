@@ -1,0 +1,14 @@
+
+# --- local run state (added by repo refresh) ---
+*.checkpoint.json
+*_checkpoint.json
+*.log
+*_done.json
+retry_queue*.json
+.wrangler/
+node_modules/
+.dev.vars
+.admin-secret
+.env
+.env.local
+*.mp4
